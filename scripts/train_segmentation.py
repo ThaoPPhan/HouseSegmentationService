@@ -7,7 +7,9 @@ from albumentations.pytorch import ToTensorV2
 from torch.utils.data import Dataset, DataLoader
 import cv2
 import matplotlib.pyplot as plt
-
+torch.cuda.empty_cache()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Applying Lab 2 Training on: {device}")
 # --- Phase 1: Dataset Class ---
 class HouseDataset(Dataset):
     def __init__(self, split_dir, transform=None):
@@ -47,24 +49,55 @@ val_transform = A.Compose([A.Normalize(), ToTensorV2()])
 
 # --- Phase 3: Training Setup ---
 # Use Transfer Learning with U-Net and ResNet backbone [cite: 14, 124]
-model = smp.Unet(encoder_name="resnet34", encoder_weights="imagenet", in_channels=3, classes=1)
+model = smp.Unet(encoder_name="resnet34", encoder_weights="imagenet", in_channels=3, classes=1).to(device)
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 loss_fn = smp.losses.DiceLoss(mode='binary') # Dice score is robust [cite: 136]
 
 # --- Phase 4: Data Loaders (Pointing to your folders) ---
 train_ds = HouseDataset("data/train", transform=train_transform)
 val_ds = HouseDataset("data/val", transform=val_transform)
-train_loader = DataLoader(train_ds, batch_size=8, shuffle=True)
-val_loader = DataLoader(val_ds, batch_size=8)
+train_loader = DataLoader(train_ds, batch_size=4, shuffle=True)
+val_loader = DataLoader(val_ds, batch_size=4)
 
 # --- Phase 5: Training Loop ---
 train_losses, val_losses = [], []
-for epoch in range(10): # Adjust epochs as needed
+
+for epoch in range(10):
     model.train()
-    # Logic to track metrics [cite: 128]
-    # Calculate IoU and Dice using your calculate_metrics function
-    # Append losses to train_losses and val_losses for plotting
-    print(f"Epoch {epoch} complete.")
+    running_train_loss = 0.0
+    
+    for images, masks in train_loader:
+        # 1. MOVE DATA TO GPU
+        images = images.to(device) 
+        masks = masks.to(device)   # Labeled pixel masks for house segmentation [cite: 120]
+        
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = loss_fn(outputs, masks)
+        loss.backward()
+        optimizer.step()
+        running_train_loss += loss.item()
+    
+    epoch_train_loss = running_train_loss / len(train_loader)
+    train_losses.append(epoch_train_loss)
+    
+    # Validation Phase
+    model.eval()
+    running_val_loss = 0.0
+    with torch.no_grad():
+        for images, masks in val_loader:
+            # 2. MOVE VALIDATION DATA TO GPU
+            images = images.to(device)
+            masks = masks.to(device)
+            
+            outputs = model(images)
+            loss = loss_fn(outputs, masks)
+            running_val_loss += loss.item()
+            
+    epoch_val_loss = running_val_loss / len(val_loader)
+    val_losses.append(epoch_val_loss)
+    
+    print(f"Epoch {epoch}: Train Loss: {epoch_train_loss:.4f}, Val Loss: {epoch_val_loss:.4f}")
 
 # --- Phase 6: Save and Plot ---
 plt.plot(train_losses, label='Train Loss')
