@@ -16,7 +16,6 @@ def generate_binary_mask(image_path, annotation_data):
     
     return mask
 
-# Implementation of Week 7 Data Augmentation
 def augment_data(image, mask):
     """
     Apply real-time augmentation to increase dataset diversity[cite: 24, 26].
