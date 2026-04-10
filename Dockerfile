@@ -1,13 +1,19 @@
-# Ensure you are using a slim Debian-based image
-FROM python:3.10-slim
+# Use a stable, slim version of Python
+FROM python:3.11-slim
 
-# Fix for Exit Code 100: Set non-interactive mode
+# Fix for Exit Code 100: Tell apt-get we are in a non-interactive shell
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Update and install with extra flags to ignore transient mirror issues
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Update and install system dependencies for OpenCV
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# The rest of your Dockerfile...
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["python", "app.py"]
